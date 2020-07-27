@@ -1,0 +1,26 @@
+name: fran-wordpress
+summary: "WordPress is a full featured web blogging tool, this charm deploys it."
+maintainer: Francisco Jimenez <francisco.jimenez.cabrera@canonical.com>
+series:
+  - bionic
+  - xenial
+  - trusty
+description: |
+ This will install and setup WordPress optimized to run in the cloud. By default it will 
+ place Ngnix and php-fpm configured to scale horizontally with Nginx's reverse proxy.
+categories: ["applications"]
+requires:
+  mail:
+    interface: smtp
+  db:
+    interface: mysql
+  nfs:
+    interface: mount
+  cache:
+    interface: memcache
+provides:
+  website:
+    interface: http
+peers:
+  loadbalancer:
+    interface: reversenginx

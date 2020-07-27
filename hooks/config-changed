@@ -1,0 +1,111 @@
+#!/bin/sh -ex
+
+. inc/common
+
+tuning_level=`config-get tuning`
+engine=`config-get engine`
+unit_address=`unit-get private-address`
+
+if [ "x${engine}" = "xapache" -o "x${engine}" = "xapache2" ]; then
+	if [ -f .web-engine ]; then
+		web_engine=`cat .web-engine`
+		service $web_engine stop
+	fi
+	apt-get -y purge nginx
+	apt-get --no-install-suggests --no-install-recommends install -y apache2-mpm-prefork libapache2-mod-php5
+	service apache2 stop
+
+  mkdir -p /srv/www/htdocs
+
+	rm -f /etc/apache2/sites-enabled/*
+	a2enmod actions rewrite alias headers php5
+
+	juju-log "Installing Apache loadbal config..."
+	install -o root -g root -m 0644 files/charm/apache/etc_apache2_sites-enabled_loadbalancer /etc/apache2/sites-available/loadbalancer.conf
+	sed -i -e "s/^  ServerName .*/  ServerName ${unit_address}/" /etc/apache2/sites-available/loadbalancer.conf
+	a2ensite loadbalancer
+
+	juju-log "Installing Apache wordpress config..."
+	install -o root -g root -m 0644 files/charm/apache/etc_apache2_sites-enabled_wordpress /etc/apache2/sites-available/wordpress.conf
+	a2ensite wordpress
+
+	# Wordpress users usually use mod_rewrite. Altough it's being enabled
+	# here, it's not used by default. But, if the user changes the
+	# permalinks to something that needs mod_rewrite, wordpress will
+	# automatically create a /var/www/.htaccess to enable it
+	a2enmod rewrite
+
+	echo "apache2" > .web-engine
+else
+	if [ -f .web-engine ]; then
+		web_engine=`cat .web-engine`
+		service $web_engine stop
+	fi
+	apt-get -y purge apache2* libapache2*
+	apt-get --no-install-suggests --no-install-recommends install -y nginx php5-fpm
+	service nginx stop
+
+	juju-log "Cleaning any old or default nginx site configs ..."
+	rm -f /etc/nginx/sites-enabled/*
+	rm -f /etc/nginx/conf.d/*
+
+	juju-log "Installing nginx common config ..."
+	rm -f /etc/nginx/nginx.conf
+	install -o root -g root -m 0644 files/charm/nginx/etc_nginx_nginx.conf /etc/nginx/nginx.conf
+
+	juju-log "Installing nginx actual site config ..."
+	#rm -f /etc/nginx/sites-available/
+	install -o root -g root -m 0644 files/charm/nginx/etc_nginx_sites-enabled_wordpress /etc/nginx/sites-available/wordpress
+	ln -sf ../sites-available/wordpress /etc/nginx/sites-enabled/wordpress
+
+	juju-log "Installing nginx loadbal config ..."
+	rm -f /etc/nginx/sites-available/loadbalancer
+	install -o root -g root -m 0644 files/charm/nginx/etc_nginx_sites-enabled_loadbalancer /etc/nginx/sites-available/loadbalancer
+	ln -sf ../sites-available/loadbalancer /etc/nginx/sites-enabled/loadbalancer
+
+	juju-log "Moving nginx var dirs to /mnt storage ..."
+	rsync -az /var/lib/nginx /mnt/ && rm -rf /var/lib/nginx && ln -s /mnt/nginx /var/lib/
+
+	echo "nginx" > .web-engine
+fi
+
+# http://i.imgur.com/TUF91.gif
+hooks/loadbalancer-rebuild
+
+juju-log "Restarting Services ..."
+hooks/restart
+
+if [ ! -f $config_file_path ]; then
+	juju-log "Nothing to configure, since nothing is installed"
+	exit 0
+fi
+
+juju-log "I will be using this tuning level: $tuning_level"
+
+if [ "x${tuning_level}" = "xoptimized" ]; then
+	# First and foremost, we need to disable the ability to edit
+	# themes and upload/update plugins. This breaks a scale-out
+	# environment. It's sad but true. If you want to update a plugin
+	# install a theme, etc; take a look at the README.
+	make_optimized
+elif [ "x${tuning_level}" = "xsingle" ]; then
+	# We need to prepare an NFS mount, because someone is probably
+	# going to try to scale out. We also need to vamp up caching.
+	make_single
+elif [ "x${tuning_level}" = "xbare" ]; then
+	# Okay, you know what you're doing. You're probably going to
+	# use Gluster to stream-line your files, so you don't need to
+	# disable anything. We trust you to do what you need to.
+	make_bare
+else
+	juju-log "Not sure about that tuning level."
+	exit 1
+fi
+
+wp plugin update --path=$wp_install_path --all
+
+do_cache
+
+chown -R www-data.www-data $wp_install_path
+
+hooks/restart

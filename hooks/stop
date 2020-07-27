@@ -1,0 +1,4 @@
+#!/bin/sh -ex
+
+engine=`cat .web-engine`
+service $engine stop

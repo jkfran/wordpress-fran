@@ -1,0 +1,31 @@
+#!/bin/sh -ex
+
+apt-get update
+
+apt-get --no-install-suggests --no-install-recommends -y install php5-memcache mysql-client pwgen php5 \
+php5-mysqlnd php5-mcrypt php5-memcache php5-curl git-core php5-gd libssh2-php exim4 debconf-utils
+
+debconf-set-selections < files/charm/exim4.seed
+dpkg-reconfigure -f noninteractive exim4-config
+
+modprobe nfs || true
+
+juju-log "Creating random secret key ..."
+if [ ! -f .wp-secret ]; then
+	pwgen -s 10 1 > .wp-secret
+fi
+
+juju-log "Installing wp-cli to make this charm's life a little easier ..."
+test -d /srv/www/wp-cli || git clone https://github.com/wp-cli/wp-cli.git /srv/www/wp-cli
+# other hooks call hooks/install and don't expect the CWD to change so
+# run this section in a subshell
+(
+	cd /srv/www/wp-cli
+	# 20120926: v0.6.0 is confirmed working, so use it rather than alpha.
+	git reset --hard v0.6.0
+	sed -ie 's/git:\/\//https:\/\//g' .gitmodules
+	git submodule update --init
+	utils/dev-build
+)
+
+juju-log "So, environment is setup. We'll wait for some hooks to fire off before we get all crazy"
