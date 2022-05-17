@@ -1,4 +1,4 @@
-import requests
+import test
 
 
 def finish_setup(unit, user='admin', password=None):
@@ -7,7 +7,7 @@ def finish_setup(unit, user='admin', password=None):
          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*',
          'Accept-Encoding': 'gzip, deflate'}
 
-    r = requests.post('http://%s/wp-admin/install.php?step=2' % unit,
+    r = test.post('http://%s/wp-admin/install.php?step=2' % unit,
                       headers=h, data={'weblog_title': 'Amulet Test %s' % unit,
                       'user_name': user, 'admin_password': password,
                       'admin_email': 'test@example.tld',
