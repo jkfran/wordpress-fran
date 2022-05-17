@@ -2,7 +2,7 @@
 
 import os
 import amulet
-import requests
+import test
 
 import helper
 
@@ -40,7 +40,7 @@ try:
 except:
     amulet.raise_status(amulet.SKIP, msg="Unable to finish WordPress setup")
 
-home_page = requests.get('http://%s/' % wp_unit.info['public-address'], proxies=None)
+home_page = test.get('http://%s/' % wp_unit.info['public-address'], proxies=None)
 home_page.raise_for_status() # Make sure it's not 5XX error
 
 d.relate('wordpress:cache', 'memcached:cache')
@@ -58,7 +58,7 @@ except:
     raise
 
 # Verify WordPress still responds with a 200
-home_page = requests.get('http://%s/' % wp_unit.info['public-address'], proxies=None)
+home_page = test.get('http://%s/' % wp_unit.info['public-address'], proxies=None)
 home_page.raise_for_status()
 
 # Verify the WordPress plugin was installed correctly
